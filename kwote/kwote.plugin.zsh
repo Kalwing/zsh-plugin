@@ -31,26 +31,26 @@ display_kwote () {
     # ]
     # display_kwote just has to display line alternatively
 
-    line_count=0
+    local line_count=0
     while read quotes; do
         if [[ -z "$author" && $quotes == \"*\", ]]; then
-            author=$quotes
+            local author=$quotes
         elif [[ $quotes =~ \"*\",?$ ]]; then
-            quote=$quotes
+            local quote=$quotes
         fi
 
         if [[ -n "$author" && -n "$quote" ]]; then
-            stripped_text=${author#\"}  # Remove leading quote
-            stripped_author=${stripped_text%\",}
+            local stripped_text=${author#\"}  # Remove leading quote
+            local stripped_author=${stripped_text%\",}
             stripped_text=${quote#\"}  # Remove leading quote
             stripped_text=${stripped_text%,}
-            stripped_quote=${stripped_text%\"}
+            local stripped_quote=${stripped_text%\"}
             if [[ $(( line_count % 2 )) == 0 ]]; then
-                author_color="\e[1;37m"
-                quote_color="\e[0;35m"
+                local author_color="\e[1;37m"
+                local quote_color="\e[0;35m"
             else
-                author_color="\e[0;37m"
-                quote_color="\e[0;34m"
+                local author_color="\e[0;37m"
+                local quote_color="\e[0;34m"
             fi
             if [[ -n "$stripped_author" ]]; then
                 em=" — "
@@ -64,12 +64,16 @@ display_kwote () {
             line_count=$(( line_count + 1 ))
         fi
     done
+    if [[ line_count < 2 ]]; then
+        return 1
+    fi
 }
 
 
 fetch_kwote () {
     if [[ $# < 1 ]]; then
         echo "Usage fetch_kwote API_url [timeout]"
+        exit 1
     fi
     if [[ $# -eq 2 ]]; then
         timeout=$2
@@ -78,10 +82,23 @@ fetch_kwote () {
     fi
 
     # Test jq parsing and display_kwote without an API:
-    # TEST="{\"lines\":[{\"author\":\"Shepard\",\"quote\":\"Come on, Liara. You've seen the data. Even if we win, you and I won't live to see the parade.\"},{\"author\":\"Liara\",\"quote\":\"Then what's the damn point? Of drinks... or... any of it... if we could all die tomorrow?\"},{\"author\":\"Shepard\",\"quote\":\"It's not tomorrow yet.\"}],\"tag\":\"mass_effect\"}"
-    # echo "${TEST}" | jq '[.lines.[] | .author, .quote]' | display_quote
+    # TEST="{\"lines\":[{\"author\":\"Shepard\",\"quote\":\"Come on, Liara. \\\nYou've seen the data. Even if we win, you and I won't live to see the parade.\"},{\"author\":\"Liara\",\"quote\":\"Then what's the damn point? Of drinks... or... any of it... if we could all die tomorrow?\"},{\"author\":\"Shepard\",\"quote\":\"It's not tomorrow yet.\"}],\"tag\":\"mass_effect\"}"
+    # echo -E "$TEST"
+    # echo -E "$TEST" | jq '[.lines.[] | .author, .quote]' | display_kwote
+    local CURL_RET=$(curl --connect-timeout $timeout --silent $1)
+    local CURL_EXIT=$?
+    if [[ $CURL_EXIT -ne 0 ]]; then
+        return 1
+    fi
 
-    curl --connect-timeout $timeout --silent $1 | jq '[.lines.[] | .author, .quote]' | display_kwote
+    local JSON=$(echo -E "$CURL_RET" | jq '[.lines.[] | .author, .quote]')
+    local JQ_EXIT=$?
+
+    if [[ $JQ_EXIT -ne 0 ]]; then
+        return 1
+    fi
+
+    echo -E "$JSON" | display_kwote || return 1
     # Pretty straightforward, here's jq (great) documentation on the items used :
     # Array/Object Value Iterator: .[]
     # When given a JSON object (aka dictionary or  hash)  as  input,  .foo
